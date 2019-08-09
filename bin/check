@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+
+declare -A domains
+
+# TODO: read config and domains
+exit
+
+function getHeader {
+    curl -I -L $1 2>&1
+}
+
+function hasRedirectFromHeader {
+    local targetCurrent=$(echo "$1" | grep --color=never Location | tail -n 1 | sed 's/^Location: //')
+
+    # no Location header was found
+    [ "$targetCurrent" == "" ] && return 1
+
+    # header was found
+    return 0
+}
+
+function getLastRedirectFromHeader {
+    local targetCurrent=$(echo "$1" | grep --color=never Location | tail -n 1 | sed 's/^Location: //')
+
+    # no Location header was found
+    [ "$targetCurrent" == "" ] && return
+
+    # remove some special chars
+    targetCurrent=$(echo -e -n "$targetCurrent" | xargs | tr -dc ':/.\-[:alnum:]')
+
+    echo "$targetCurrent"
+}
+
+function checkLink {
+    local domain="$1"
+    local targetExpected="$2"
+    local testState=$3
+    local state=0
+    local header=""
+
+    echo "check domain $domain"
+    echo "target expected: $targetExpected "
+
+    # fetch header
+    if ! $testState; then
+        header=$(getHeader "$domain")
+    fi
+
+    # extract redirect
+    if hasRedirectFromHeader "$header"; then
+        targetCurrent=$(getLastRedirectFromHeader "$header")
+    else
+        targetCurrent="no redirect was found"
+    fi
+
+    echo "target current:  $targetCurrent"
+
+    echo -n "State: "
+    if $testState || [ "$targetCurrent" == "$targetExpected" ]; then
+        echo -e "\e[42mOK\e[0m"
+        state=0
+    else
+        echo -e "\e[41mNOT OK\e[0m"
+        state=1
+    fi
+
+    echo ""
+
+    # simulate positive state
+    $testState && return 0
+
+    return $state
+}
+
+function doTest {
+    local testState=false
+    local stateOverall=true
+
+    local protocols=( 'http://' 'http://www.' 'https://' 'https://www.' )
+
+    # iterate through all domains
+    for i in "${!domains[@]}"; do
+        for protocol in "${protocols[@]}"; do
+            domain="$protocol$i"
+            targetExpected="${domains[$i]}"
+            if ! checkLink "$domain" "$targetExpected" $testState; then
+                stateOverall=false
+            fi
+        done
+    done
+
+    # print state
+    if $stateOverall; then
+        echo -e "\e[42mAll tests passed.\e[0m"
+    else
+        echo -e "\e[41mAt least one test failed.\e[0m"
+    fi
+}
+
+# start the test
+doTest
