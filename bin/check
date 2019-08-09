@@ -74,10 +74,12 @@ function checkLink {
     local domain="$1"
     local targetExpected="$2"
     local testState=$3
+    local numberCurrentTest=$4
+    local numberAllTests=$5
     local state=0
     local header=""
 
-    echo "check domain $domain"
+    echo "$numberCurrentTest/$numberAllTests) check domain $domain"
     echo "target expected: $targetExpected "
 
     # fetch header
@@ -118,17 +120,23 @@ function doRedirectTest {
     local protocols=( 'http://' 'http://www.' 'https://' 'https://www.' )
 
     # iterate through all domains
+    local counter=0
     for i in "${!domains[@]}"; do
         for protocol in "${protocols[@]}"; do
+            ((counter++))
+
             domain="$protocol$i"
             targetExpected="${domains[$i]}"
-            if ! checkLink "$domain" "$targetExpected" $testState; then
+
+
+            if ! checkLink "$domain" "$targetExpected" $testState $counter $((${#domains[@]}*${#protocols[@]})); then
                 stateOverall=false
             fi
         done
     done
 
     # print state
+    echo -n "State: "
     if $stateOverall; then
         echo -e "\e[42mAll tests passed.\e[0m"
     else
@@ -176,6 +184,8 @@ if [ "$executionType" == "check" ]; then
     if ! $configFileExists; then
         echo "Config path \"$configPath\" was not found." && exit 2
     fi
+
+    echo "Use config file \"$configPath\"." && echo ""
 
     # read given config file
     while read source target; do
