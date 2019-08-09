@@ -1,9 +1,48 @@
 #!/usr/bin/env bash
 
-declare -A domains
+# initial values
+executionType="check"
 
-# TODO: read config and domains
-exit
+# script path
+scriptPath="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+# declare parameter list array
+PARAMETERS=()
+
+# read arguments
+# help:
+# help: Usage: %scriptname% [options...] {install|update|status}
+while [[ $# > 0 ]]; do
+    case "$1" in
+        # help:  -h,    --help                    Shows this help.
+        # help:
+        -h|--help)
+            cat "$BASH_SOURCE" | grep --color=never "# help:" | grep -v 'cat parameter' | sed 's/[ ]*# help:[ ]\?//g' | sed "s~%scriptname%~$scriptname~g"
+            exit 0
+            ;;
+
+        # help:  -v,    --version                 Shows the version number.
+        # help:
+        -v|--version)
+            [ "$(type -t showVersion)" == "function" ] && showVersion || echo "Create a showVersion function to show some text here."
+            exit 0
+            ;;
+
+        # collect all unknown parameters
+        *)
+            PARAMETERS+=("$1")
+            ;;
+    esac
+    shift
+done
+
+# assign mode to executionType var
+#if [ ! -z ${PARAMETERS[0]} ]; then
+#    executionType="${PARAMETERS[0]}"
+#fi
+
+# declare domains variable
+declare -A domains
 
 function getHeader {
     curl -I -L $1 2>&1
@@ -72,7 +111,7 @@ function checkLink {
     return $state
 }
 
-function doTest {
+function doRedirectTest {
     local testState=false
     local stateOverall=true
 
@@ -98,4 +137,57 @@ function doTest {
 }
 
 # start the test
-doTest
+if [ "$executionType" == "check" ]; then
+
+    # Parameter one is expected as a config file
+    if [ ${#PARAMETERS[@]} -lt 1 ]; then
+        echo "Config path is missing." && exit 1
+    fi
+
+    # config path
+    configPath=""
+
+    # config check variable
+    configFileExists=false
+
+    # try to find global file
+    if ! $configFileExists; then
+        # build config file
+        configPath="${PARAMETERS[0]}"
+
+        # check config file (global file was found)
+        if [ -f "$configPath" ]; then
+            configFileExists=true
+        fi
+    fi
+
+    # try to find local file
+    if ! $configFileExists; then
+        # build config file
+        configPath="$scriptPath/../${PARAMETERS[0]}"
+
+        # check config file (local file was found)
+        if [ -f "$configPath" ]; then
+            configFileExists=true
+        fi
+    fi
+
+    # config file was not found
+    if ! $configFileExists; then
+        echo "Config path \"$configPath\" was not found." && exit 2
+    fi
+
+    # read given config file
+    while read source target; do
+        # config error
+        if [ "$source" == "" ] || [ "$target" == "" ]; then
+            continue
+        fi
+
+        domains[$source]="$target"
+    done < "$configPath"
+
+    # start redirect checker
+    doRedirectTest
+fi
+
